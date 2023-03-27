@@ -1,0 +1,51 @@
+name: Deploy SSH
+
+on: workflow_dispatch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          path: flask-example
+      - name: Download Add INI and WSGI Conf Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/2c31170a1b79d94db5886202a891d369/raw/1006b3e9305e4b3acdd2818b7e6f078fe0a657b6/add-ini-wsgi-conf.sh
+        working-directory: ./flask-example
+      - name: Download Add Service Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/e685f855788c5473d28aa0a062ea85df/raw/a1eb1a1b55f269484ae70edc981dbd2a7c0d2927/add-service.sh
+        working-directory: ./flask-example
+      - name: Download Add NGINX Conf Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/e6fc478d29965a2c3ee74444434876a0/raw/47e9f0ed932645617588b4ffdb299e8715b94919/add-nginx-wsgi-conf.sh
+        working-directory: ./flask-example
+      - name: Use SSH Copy to Clone Repo
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{secrets.PRIVATE_KEY}}
+          port: ${{ secrets.PORT }}
+          source: "flask-example"
+          target: "/var/www/html"
+      - name: Use SSH to Execute Scripts
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{secrets.HOST}}
+          port: ${{secrets.PORT}}
+          username: ${{secrets.USERNAME}}
+          key: ${{secrets.PRIVATE_KEY}}
+          script: |
+            cd /var/www/html/flask-example
+            python3.10 -m venv flaskenv
+            source flaskenv/bin/activate
+            $(pwd)/flaskenv/bin/pip3 install -r requirements.txt
+            sudo chmod +x add-ini-wsgi-conf.sh add-nginx-wsgi-conf.sh add-service.sh
+            sudo rm flask.ini
+            sudo ./add-ini-wsgi-conf.sh flask.ini flask.sock
+            sudo chown $USER:$USER flask.ini
+            sudo ./add-service.sh flask.example $USER flaskenv flask.ini
+            sudo ./add-nginx-wsgi-conf.sh flask.example flask.sock
+            sudo nginx -t
+            sudo systemctl reload nginx

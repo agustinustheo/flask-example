@@ -1,0 +1,36 @@
+name: Deploy Runner
+
+on: workflow_dispatch
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Create VENV
+        run: python3.10 -m venv flaskenv
+      - name: Activate VENV
+        run: source flaskenv/bin/activate
+      - name: Install Packages
+        run: $(pwd)/flaskenv/bin/pip3 install -r requirements.txt
+      - name: Download Add INI and WSGI Conf Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/2c31170a1b79d94db5886202a891d369/raw/1006b3e9305e4b3acdd2818b7e6f078fe0a657b6/add-ini-wsgi-conf.sh
+      - name: Chmod Script
+        run: sudo chmod +x add-ini-wsgi-conf.sh
+      - name: Run Script
+        run: sudo ./add-ini-wsgi-conf.sh flask.ini flask.sock
+      - name: Download Add Service Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/e685f855788c5473d28aa0a062ea85df/raw/a1eb1a1b55f269484ae70edc981dbd2a7c0d2927/add-service.sh
+      - name: Chmod Script
+        run: sudo chmod +x add-service.sh
+      - name: Run Script
+        run: sudo ./add-service.sh flask.example $USER flaskenv flask.ini
+      - name: Download Add NGINX Conf Script
+        run: curl -O https://gist.githubusercontent.com/agustinustheo/e6fc478d29965a2c3ee74444434876a0/raw/47e9f0ed932645617588b4ffdb299e8715b94919/add-nginx-wsgi-conf.sh
+      - name: Chmod Script
+        run: sudo chmod +x add-nginx-wsgi-conf.sh 
+      - name: Run Script
+        run: sudo ./add-nginx-wsgi-conf.sh flask.example flask.sock
