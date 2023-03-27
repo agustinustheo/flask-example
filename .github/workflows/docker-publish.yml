@@ -1,0 +1,64 @@
+# Based on https://github.com/mrsked/mrsk/blob/main/.github/workflows/docker-publish.yml
+name: Docker Publish
+
+on: workflow_dispatch
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: registry.hub.docker.com
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            agustinustheoo/flask-example:latest
+            agustinustheoo/flask-example:${{ github.ref_name }}
+  deploy:
+    needs: build-and-push-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Use SSH to Execute Scripts
+        uses: appleboy/ssh-action@v0.1.2
+        with:
+          host: ${{secrets.HOST}}
+          port: ${{secrets.PORT}}
+          username: ${{secrets.USERNAME}}
+          key: ${{secrets.PRIVATE_KEY}}
+          script: |
+            cd /var/www/html/flask-example
+            curl -O https://gist.githubusercontent.com/agustinustheo/e685f855788c5473d28aa0a062ea85df/raw/a1eb1a1b55f269484ae70edc981dbd2a7c0d2927/add-service.sh
+            curl -O https://gist.githubusercontent.com/agustinustheo/e6fc478d29965a2c3ee74444434876a0/raw/5e007f2c454c47f9d70931257746c7c9dc8246a7/add-nginx-wsgi-conf.sh
+            python3.10 -m venv flaskenv
+            source flaskenv/bin/activate
+            pip3 install -r requirements.txt
+            sudo chmod +x add-ini-wsgi-conf.sh add-nginx-wsgi-conf.sh add-service.sh
+            sudo rm flask.ini
+            sudo ./add-ini-wsgi-conf.sh flask.ini flask.sock
+            sudo chown agustinustheoo:agustinustheoo flask.ini
+            sudo ./add-service.sh test.steego.link agustinustheoo flaskenv flask.ini
+            sudo ./add-nginx-wsgi-conf.sh test.steego.link flask.sock
+            sudo nginx -t
+            sudo systemctl reload nginx
